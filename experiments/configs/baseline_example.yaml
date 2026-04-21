@@ -1,0 +1,25 @@
+type: baseline
+name: truck_parking_baseline
+description: >
+  Compare the multi-agent pipeline output against a single Gemini call
+  (no iteration, no multi-agent feedback) using an LLM judge.
+
+goal: |
+  Design a simple decision-support system that recommends truck parking locations
+  based on distance, estimated availability, and driver preferences.
+
+  The system should balance:
+    - Driver convenience   (short detour, low cost, familiar locations)
+    - System efficiency    (avoid over-utilised locations, distribute load)
+    - Implementation feasibility (simple, scalable, easy to maintain)
+
+baseline_model: gemini-2.5-flash
+judge_model: gemini-2.5-flash
+
+# Criteria the judge scores each solution on (1-10 per criterion)
+judge_criteria:
+  - usability
+  - clarity
+  - feasibility
+  - stakeholder_balance
+  - overall_quality

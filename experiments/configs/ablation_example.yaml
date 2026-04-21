@@ -1,0 +1,21 @@
+type: ablation
+name: truck_parking_ablation
+description: >
+  Measure what each evaluator agent contributes by disabling one at a time
+  and comparing the final scores against the full-pipeline run.
+
+goal: |
+  Design a simple decision-support system that recommends truck parking locations
+  based on distance, estimated availability, and driver preferences.
+
+  The system should balance:
+    - Driver convenience   (short detour, low cost, familiar locations)
+    - System efficiency    (avoid over-utilised locations, distribute load)
+    - Implementation feasibility (simple, scalable, easy to maintain)
+
+# Each agent listed here produces one ablated run.
+# The full run (all agents active) is always included automatically.
+ablate_agents:
+  - end_user
+  - policy
+  - software

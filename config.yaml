@@ -1,0 +1,61 @@
+# ── Model Configuration ──────────────────────────────────────────────────────
+# Each agent maps to a provider + model. Swap models here without touching code.
+models:
+  orchestrator:
+    provider: gemini
+    model: gemini-2.5-flash
+    temperature: 0.3
+  driver_agent:
+    provider: ollama
+    model: llama3.2:3b
+    temperature: 0.4
+  policy_agent:
+    provider: ollama
+    model: llama3.2:3b
+    temperature: 0.3
+  software_agent:
+    provider: ollama
+    model: llama3.2:3b
+    temperature: 0.3
+  coding_agent:
+    provider: gemini
+    model: gemini-2.5-flash
+    temperature: 0.2
+  synthesis:
+    provider: gemini
+    model: gemini-2.5-flash
+    temperature: 0.4
+
+# ── Pipeline Control ─────────────────────────────────────────────────────────
+pipeline:
+  max_iterations: 5
+  score_threshold: 7.5           # Stop when overall score >= this
+
+  # Convergence: ALL three conditions must be true simultaneously
+  convergence_delta: 0.5          # |score_n - score_(n-1)| must be < this
+  min_confidence_threshold: 0.35  # Every agent must report confidence >= this
+  max_unresolved_conflicts: 0     # Number of tolerated unresolved agent conflicts
+
+  # Aggregation edge-case guard
+  conflict_threshold: 2.0         # Score gap that flags an inter-agent conflict
+  min_total_effective_weight: 0.25 # If confidence-adjusted weights sum < this, use raw weights
+
+  ollama_base_url: "http://localhost:11434"
+
+# ── Agent Weights ─────────────────────────────────────────────────────────────
+# Relative importance of each evaluator perspective.
+# Confidence-adjusted at runtime; raw weights used as fallback.
+agent_weights:
+  driver: 0.35
+  policy: 0.30
+  software: 0.35
+
+# ── Logging ───────────────────────────────────────────────────────────────────
+logging:
+  level: INFO                    # DEBUG | INFO | WARNING | ERROR
+  file: outputs/pipeline.log     # Structured JSON log file
+
+# ── Persistence ───────────────────────────────────────────────────────────────
+persistence:
+  output_dir: outputs
+  save_intermediate: true        # Write iter_N.json after every iteration

@@ -1,0 +1,17 @@
+type: convergence
+name: truck_parking_convergence
+description: >
+  Measure how consistently the pipeline converges on the truck parking
+  recommendation goal across 3 independent runs.
+
+goal: |
+  Design a simple decision-support system that recommends truck parking locations
+  based on distance, estimated availability, and driver preferences.
+
+  The system should balance:
+    - Driver convenience   (short detour, low cost, familiar locations)
+    - System efficiency    (avoid over-utilised locations, distribute load)
+    - Implementation feasibility (simple, scalable, easy to maintain)
+
+num_runs: 3
+# pipeline_config_path: null  # leave null to use default config.yaml

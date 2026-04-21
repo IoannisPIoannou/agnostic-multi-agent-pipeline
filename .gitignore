@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+.env
+
+# Pipeline runtime outputs
+outputs/
+experiments/results/
+pipeline.log
+*.log
+
+# IDE / OS
+.vscode/
+.idea/
+*.DS_Store
+Thumbs.db

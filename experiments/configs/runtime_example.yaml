@@ -1,0 +1,28 @@
+type: runtime
+name: truck_parking_runtime
+description: >
+  Measure wall time, API call counts, and estimated Gemini cost for
+  a single pipeline run on the truck parking goal.
+
+goal: |
+  Design a simple decision-support system that recommends truck parking locations
+  based on distance, estimated availability, and driver preferences.
+
+  The system should balance:
+    - Driver convenience   (short detour, low cost, familiar locations)
+    - System efficiency    (avoid over-utilised locations, distribute load)
+    - Implementation feasibility (simple, scalable, easy to maintain)
+
+num_runs: 1
+
+# Gemini 2.5 Flash pricing (USD per 1M tokens, approximate as of 2025)
+gemini_input_cost_per_mtok:  0.075
+gemini_output_cost_per_mtok: 0.300
+
+# Average token estimates per Gemini call — adjust after profiling
+avg_orchestrator_input_tokens:  800
+avg_orchestrator_output_tokens: 400
+avg_coding_input_tokens:       1200
+avg_coding_output_tokens:       800
+avg_synthesis_input_tokens:    1500
+avg_synthesis_output_tokens:   1000
