@@ -1,0 +1,49 @@
+type: prompt_specificity
+name: logistics_truck_parking
+description: "Prompt specificity sensitivity for the truck parking decision-support system"
+domain: logistics
+
+# Three versions of the same goal — vague → moderate → highly_specific
+prompts:
+  vague: >
+    Design a truck parking system.
+  moderate: >
+    Design a decision-support system that recommends truck parking locations
+    based on distance, availability, and driver preferences.
+  highly_specific: >
+    Design a decision-support system for long-haul truck drivers that recommends
+    parking locations within a configurable radius, ranks spots by real-time
+    availability, distance from current GPS position, driver-rated amenities
+    (showers, food, security), mandatory HOS rest-period compliance, and price
+    range. The system must ingest live occupancy feeds from partner lots, fall
+    back to historical occupancy models when feeds are unavailable, handle
+    multi-truck convoy bookings, and notify drivers 30 minutes before a selected
+    spot becomes unavailable.
+
+# --- Convergence sub-experiment ---
+convergence_threshold: 8.0
+convergence_max_iterations: 5
+convergence_num_runs: 3        # runs per specificity level at threshold=8.0
+
+# --- Ablation sub-experiment ---
+ablation_agents:
+  - end_user
+  - policy
+  - software
+ablation_num_runs_per_variant: 3   # reps per (specificity × variant)
+
+# --- Baseline sub-experiment ---
+baseline_num_runs: 3               # pipeline reps to reuse from convergence
+baseline_model: gemini-2.5-flash
+judge_model: gemini-2.5-flash
+judge_criteria:
+  - usability
+  - clarity
+  - feasibility
+  - stakeholder_balance
+  - overall_quality
+
+# --- Threshold sweep sub-experiment ---
+sweep_thresholds: [7.0, 8.0, 9.0]  # 8.0 reuses convergence runs (no extra cost)
+sweep_num_runs: 3
+sweep_max_iterations: 5

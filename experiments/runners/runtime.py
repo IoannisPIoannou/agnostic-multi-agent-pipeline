@@ -54,26 +54,28 @@ def _count_api_calls(log_entries: list[dict]) -> dict:
     as retries so the total reflects actual calls made, not just successes.
     """
     counts: dict[str, int] = {
-        "orchestrator":        0,
-        "coding":              0,
-        "synthesis":           0,
-        "end_user":            0,
-        "policy":              0,
-        "software":            0,
-        "fallbacks":           0,
-        "retry_attempts":      0,
-        "total_gemini":        0,
-        "total_ollama":        0,
+        "orchestrator":           0,
+        "independent_evaluator":  0,
+        "coding":                 0,
+        "synthesis":              0,
+        "end_user":               0,
+        "policy":                 0,
+        "software":               0,
+        "fallbacks":              0,
+        "retry_attempts":         0,
+        "total_gemini":           0,
+        "total_ollama":           0,
     }
-    _gemini_agents = {"orchestrator", "coding", "synthesis"}
+    _gemini_agents = {"orchestrator", "independent_evaluator", "coding", "synthesis"}
     _ollama_agents  = {"end_user", "policy", "software"}
     event_map = {
-        "orchestrator_complete": "orchestrator",
-        "coding_complete":       "coding",
-        "synthesis_complete":    "synthesis",
-        "end_user_complete":     "end_user",
-        "policy_complete":       "policy",
-        "software_complete":     "software",
+        "orchestrator_complete":            "orchestrator",
+        "independent_evaluator_complete":   "independent_evaluator",
+        "coding_complete":                  "coding",
+        "synthesis_complete":               "synthesis",
+        "end_user_complete":                "end_user",
+        "policy_complete":                  "policy",
+        "software_complete":                "software",
     }
     for entry in log_entries:
         event = entry.get("event", "")
@@ -111,14 +113,16 @@ def _estimate_cost(api_counts: dict, cfg: RuntimeConfig) -> dict:
       - Enable Gemini token usage logging for exact per-call token figures.
     """
     input_tok = (
-        api_counts["orchestrator"] * cfg.avg_orchestrator_input_tokens
-        + api_counts["coding"]       * cfg.avg_coding_input_tokens
-        + api_counts["synthesis"]    * cfg.avg_synthesis_input_tokens
+        api_counts["orchestrator"]          * cfg.avg_orchestrator_input_tokens
+        + api_counts["independent_evaluator"] * cfg.avg_independent_evaluator_input_tokens
+        + api_counts["coding"]                * cfg.avg_coding_input_tokens
+        + api_counts["synthesis"]             * cfg.avg_synthesis_input_tokens
     )
     output_tok = (
-        api_counts["orchestrator"] * cfg.avg_orchestrator_output_tokens
-        + api_counts["coding"]       * cfg.avg_coding_output_tokens
-        + api_counts["synthesis"]    * cfg.avg_synthesis_output_tokens
+        api_counts["orchestrator"]          * cfg.avg_orchestrator_output_tokens
+        + api_counts["independent_evaluator"] * cfg.avg_independent_evaluator_output_tokens
+        + api_counts["coding"]                * cfg.avg_coding_output_tokens
+        + api_counts["synthesis"]             * cfg.avg_synthesis_output_tokens
     )
     input_cost  = (input_tok  / 1_000_000) * cfg.gemini_input_cost_per_mtok
     output_cost = (output_tok / 1_000_000) * cfg.gemini_output_cost_per_mtok

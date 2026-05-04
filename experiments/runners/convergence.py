@@ -46,16 +46,13 @@ def _extract_run_metrics(final_state: dict) -> dict:
         "stop_reason":                  final_state.get("stop_reason", "unknown"),
         "converged_internally":         any(m.get("converged", False) for m in history),
         "score_progression":            [m.get("overall_score", 0.0) for m in history],
-        "driver_avg_per_iter":          [m.get("driver_avg", 0.0) for m in history],
-        "policy_avg_per_iter":          [m.get("policy_avg", 0.0) for m in history],
-        "software_avg_per_iter":        [m.get("software_avg", 0.0) for m in history],
-        "driver_conf_per_iter":         [m.get("driver_conf", 0.0) for m in history],
-        "policy_conf_per_iter":         [m.get("policy_conf", 0.0) for m in history],
-        "software_conf_per_iter":       [m.get("software_conf", 0.0) for m in history],
+        "goal_alignment_per_iter":      [m.get("goal_alignment", 0.0) for m in history],
+        "completeness_per_iter":        [m.get("completeness", 0.0) for m in history],
+        "feasibility_per_iter":         [m.get("feasibility", 0.0) for m in history],
+        "clarity_per_iter":             [m.get("clarity", 0.0) for m in history],
+        "innovation_per_iter":          [m.get("innovation", 0.0) for m in history],
+        "confidence_per_iter":          [m.get("confidence", 0.0) for m in history],
         "unresolved_conflicts_per_iter":[m.get("unresolved_conflicts", 0) for m in history],
-        "used_weight_fallback_any_iter": any(
-            m.get("used_weight_fallback", False) for m in history
-        ),
         "fallback_events": sum(
             1 for e in final_state.get("log_entries", [])
             if e.get("event") == "fallback_activated"

@@ -78,6 +78,15 @@ def _build_messages(state: PipelineState) -> list:
         decision_logic=artifact.get("decision_logic", "N/A"),
         priority_focus=priority,
     )
+
+    # Inject revision request when the audit agent flagged the previous feedback.
+    revision_req = (state.get("policy_audit") or {}).get("revision_request")
+    if revision_req and state.get("policy_feedback") is not None:
+        user_content += (
+            f"\n\n## REVISION REQUEST (from audit agent)\n{revision_req}\n\n"
+            "Your previous feedback was flagged. Revise it addressing the issues above."
+        )
+
     return [SystemMessage(content=_SYSTEM), HumanMessage(content=user_content)]
 
 

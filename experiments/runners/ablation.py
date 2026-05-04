@@ -27,6 +27,7 @@ Usage:
 from __future__ import annotations
 
 import json
+import statistics
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -85,6 +86,80 @@ _FEEDBACK_KEY: dict[str, str] = {
     "software": "software_feedback",
 }
 
+# Stub AuditOutput dicts for ablation experiments — always approved so the
+# ablation graph never enters revision loops and timing stays predictable.
+_STUB_AUDIT: dict[str, dict] = {
+    "end_user": {
+        "role_adherence_score": 10.0,
+        "grounding_score": 10.0,
+        "specificity_score": 10.0,
+        "score_text_consistency_score": 10.0,
+        "overall_audit_score": 10.0,
+        "approved": True,
+        "issues": [],
+        "revision_request": None,
+        "confidence": 1.0,
+    },
+    "policy": {
+        "role_adherence_score": 10.0,
+        "grounding_score": 10.0,
+        "specificity_score": 10.0,
+        "score_text_consistency_score": 10.0,
+        "overall_audit_score": 10.0,
+        "approved": True,
+        "issues": [],
+        "revision_request": None,
+        "confidence": 1.0,
+    },
+    "software": {
+        "role_adherence_score": 10.0,
+        "grounding_score": 10.0,
+        "specificity_score": 10.0,
+        "score_text_consistency_score": 10.0,
+        "overall_audit_score": 10.0,
+        "approved": True,
+        "issues": [],
+        "revision_request": None,
+        "confidence": 1.0,
+    },
+}
+
+# Maps agent name → (audit_key, attempts_key, status_key)
+_AUDIT_KEYS: dict[str, tuple[str, str, str]] = {
+    "end_user": ("end_user_audit", "end_user_audit_attempts", "end_user_audit_status"),
+    "policy":   ("policy_audit",   "policy_audit_attempts",   "policy_audit_status"),
+    "software": ("software_audit", "software_audit_attempts", "software_audit_status"),
+}
+
+
+def _make_stub_audit_node(agent_name: str):
+    """
+    Return a LangGraph-compatible stub audit node for ablation experiments.
+    Always approves immediately so no revision loops occur during ablation.
+    """
+    audit_key, attempts_key, status_key = _AUDIT_KEYS[agent_name]
+    stub_audit = _STUB_AUDIT[agent_name]
+
+    def stub_audit_node(state: PipelineState) -> dict:
+        new_attempts = state.get(attempts_key, 0) + 1
+        log_entry = make_log_entry(
+            event=f"{agent_name}_audit_ablation_stub",
+            node=f"{agent_name}_audit",
+            run_id=state["run_id"],
+            iteration=state["iteration"],
+            message=f"{agent_name} audit stub — always approved for ablation",
+            attempt=new_attempts,
+        )
+        return {
+            audit_key:    stub_audit,
+            attempts_key: new_attempts,
+            status_key:   "approved",
+            "log_entries": [log_entry],
+        }
+
+    stub_audit_node.__name__ = f"{agent_name}_audit_stub"
+    return stub_audit_node
+
 
 def _make_stub_node(agent_name: str):
     """Return a LangGraph-compatible stub node for a disabled agent."""
@@ -111,16 +186,21 @@ def _make_stub_node(agent_name: str):
 def _build_ablated_graph(disabled_agents: list[str]):
     """
     Build a fresh (non-cached) LangGraph graph with stub nodes for each
-    disabled agent. Mirrors the topology in graph/builder.py exactly.
+    disabled agent. Mirrors the topology in graph/builder.py exactly,
+    including audit nodes (always stub-approved so no revision loops occur).
     """
     from langgraph.graph import END, START, StateGraph
 
     from agents.aggregator import aggregator_node
     from agents.coding import coding_node
     from agents.end_user import end_user_node
+    from agents.end_user_audit import route_end_user_audit
+    from agents.independent_evaluator import independent_evaluator_node
     from agents.orchestrator import orchestrator_node
     from agents.policy import policy_node
+    from agents.policy_audit import route_policy_audit
     from agents.software import software_node
+    from agents.software_audit import route_software_audit
     from agents.synthesis import synthesis_node
     from evaluation.evaluator import evaluator_node, routing_function
 
@@ -132,25 +212,50 @@ def _build_ablated_graph(disabled_agents: list[str]):
     for agent in disabled_agents:
         node_funcs[agent] = _make_stub_node(agent)
 
+    # Audit nodes are always stubs in ablation: always approve, never loop.
+    audit_funcs = {
+        "end_user": _make_stub_audit_node("end_user"),
+        "policy":   _make_stub_audit_node("policy"),
+        "software": _make_stub_audit_node("software"),
+    }
+
     builder = StateGraph(PipelineState)
-    builder.add_node("orchestrator", orchestrator_node)
-    builder.add_node("end_user",     node_funcs["end_user"])
-    builder.add_node("policy",       node_funcs["policy"])
-    builder.add_node("software",     node_funcs["software"])
-    builder.add_node("aggregator",   aggregator_node)
-    builder.add_node("coding",       coding_node)
-    builder.add_node("evaluator",    evaluator_node)
-    builder.add_node("synthesis",    synthesis_node)
+    builder.add_node("orchestrator",           orchestrator_node)
+    builder.add_node("end_user",               node_funcs["end_user"])
+    builder.add_node("policy",                 node_funcs["policy"])
+    builder.add_node("software",               node_funcs["software"])
+    builder.add_node("end_user_audit",         audit_funcs["end_user"])
+    builder.add_node("policy_audit",           audit_funcs["policy"])
+    builder.add_node("software_audit",         audit_funcs["software"])
+    builder.add_node("aggregator",             aggregator_node)
+    builder.add_node("coding",                 coding_node)
+    builder.add_node("independent_evaluator",  independent_evaluator_node)
+    builder.add_node("evaluator",              evaluator_node)
+    builder.add_node("synthesis",              synthesis_node)
 
     builder.add_edge(START, "orchestrator")
     builder.add_edge("orchestrator", "end_user")
     builder.add_edge("orchestrator", "policy")
     builder.add_edge("orchestrator", "software")
-    builder.add_edge("end_user",  "aggregator")
-    builder.add_edge("policy",    "aggregator")
-    builder.add_edge("software",  "aggregator")
-    builder.add_edge("aggregator", "coding")
-    builder.add_edge("coding",     "evaluator")
+    builder.add_edge("end_user",  "end_user_audit")
+    builder.add_edge("policy",    "policy_audit")
+    builder.add_edge("software",  "software_audit")
+    # Stub audit nodes always return "done"; "revise" branch registered but never taken.
+    builder.add_conditional_edges(
+        "end_user_audit", route_end_user_audit,
+        {"revise": "end_user", "done": "aggregator"},
+    )
+    builder.add_conditional_edges(
+        "policy_audit", route_policy_audit,
+        {"revise": "policy", "done": "aggregator"},
+    )
+    builder.add_conditional_edges(
+        "software_audit", route_software_audit,
+        {"revise": "software", "done": "aggregator"},
+    )
+    builder.add_edge("aggregator",            "coding")
+    builder.add_edge("coding",                "independent_evaluator")
+    builder.add_edge("independent_evaluator", "evaluator")
     builder.add_conditional_edges(
         "evaluator",
         routing_function,
@@ -214,6 +319,8 @@ def _extract_variant_metrics(final_state: dict, disabled: list[str]) -> dict:
 def run_ablation_experiment(cfg: AblationConfig, output_dir: Path) -> dict:
     """
     Run the full pipeline, then one run per disabled agent.
+    Each variant is run cfg.num_runs_per_variant times; results are aggregated
+    into mean/std per variant for statistical reliability.
     Returns the full result dict and saves it to output_dir.
     """
     pipeline_cfg = get_config()
@@ -224,57 +331,79 @@ def run_ablation_experiment(cfg: AblationConfig, output_dir: Path) -> dict:
     exp_dir = output_dir / experiment_id
     exp_dir.mkdir(parents=True, exist_ok=True)
 
-    # Variants: full run first, then one per ablated agent
+    n = cfg.num_runs_per_variant
     variants_to_run: list[list[str]] = [[]] + [[a] for a in cfg.ablate_agents]
     variant_results = []
 
     for disabled in variants_to_run:
-        label  = "full" if not disabled else f"no_{disabled[0]}"
-        run_id = str(uuid.uuid4())[:8]
-        logger.info(
-            f"[ablation] Variant={label} | run_id={run_id}",
-            extra={"run_id": run_id, "node": "experiment"},
-        )
-
-        state  = initial_state(user_goal=cfg.goal, run_id=run_id, cfg=pipeline_cfg)
-        graph  = _build_ablated_graph(disabled)
+        label = "full" if not disabled else f"no_{disabled[0]}"
+        graph = _build_ablated_graph(disabled)
         run_output_dir = Path("outputs")
+        individual_runs = []
 
-        try:
-            final_state = _run_graph(graph, state, run_output_dir)
-            save_final_outputs(final_state, run_output_dir)
-        except Exception as exc:
-            logger.error(
-                f"[ablation] Variant={label} failed: {exc}",
+        for rep in range(n):
+            run_id = str(uuid.uuid4())[:8]
+            logger.info(
+                f"[ablation] Variant={label} rep={rep+1}/{n} | run_id={run_id}",
                 extra={"run_id": run_id, "node": "experiment"},
             )
-            variant_results.append({
-                "label": label,
-                "disabled_agents": disabled,
-                "run_id": run_id,
-                "error": str(exc),
-            })
-            continue
+            state = initial_state(user_goal=cfg.goal, run_id=run_id, cfg=pipeline_cfg)
 
-        metrics = _extract_variant_metrics(final_state, disabled)
-        metrics["run_id"] = run_id
-        variant_results.append(metrics)
-        logger.info(
-            f"[ablation] Variant={label} done | "
-            f"score={metrics['final_score']:.2f} | "
-            f"iters={metrics['iterations_run']}",
-            extra={"run_id": run_id, "node": "experiment"},
-        )
+            try:
+                final_state = _run_graph(graph, state, run_output_dir)
+                save_final_outputs(final_state, run_output_dir)
+            except Exception as exc:
+                logger.error(
+                    f"[ablation] Variant={label} rep={rep+1} failed: {exc}",
+                    extra={"run_id": run_id, "node": "experiment"},
+                )
+                individual_runs.append({"run_index": rep + 1, "run_id": run_id, "error": str(exc)})
+                continue
+
+            m = _extract_variant_metrics(final_state, disabled)
+            m["run_id"]    = run_id
+            m["run_index"] = rep + 1
+            individual_runs.append(m)
+            logger.info(
+                f"[ablation] Variant={label} rep={rep+1} done | "
+                f"score={m['final_score']:.2f} | iters={m['iterations_run']}",
+                extra={"run_id": run_id, "node": "experiment"},
+            )
+
+        # Aggregate across successful reps
+        good_runs = [r for r in individual_runs if "error" not in r]
+        scores    = [r["final_score"] for r in good_runs]
+        iters     = [r["iterations_run"] for r in good_runs]
+
+        variant_entry = {
+            "label":            label,
+            "disabled_agents":  disabled,
+            "num_runs":         n,
+            "runs":             individual_runs,
+            # Aggregated stats (used by report generators and summaries)
+            "final_score":      round(statistics.mean(scores), 4) if scores else 0.0,
+            "score_std":        round(statistics.stdev(scores), 4) if len(scores) > 1 else 0.0,
+            "score_min":        round(min(scores), 2) if scores else 0.0,
+            "score_max":        round(max(scores), 2) if scores else 0.0,
+            "iterations_run":   round(statistics.mean(iters), 2) if iters else 0,
+            "stop_reason":      good_runs[-1]["stop_reason"] if good_runs else "unknown",
+            "unresolved_conflicts_final": (
+                good_runs[-1]["unresolved_conflicts_final"] if good_runs else 0
+            ),
+            "num_components":   good_runs[-1]["num_components"] if good_runs else 0,
+        }
+        variant_results.append(variant_entry)
 
     result = {
-        "experiment_id":   experiment_id,
-        "experiment_type": "ablation",
-        "name":            cfg.name,
-        "description":     cfg.description,
-        "goal":            cfg.goal,
-        "ablated_agents":  cfg.ablate_agents,
-        "timestamp_utc":   datetime.now(tz=timezone.utc).isoformat(),
-        "variants":        variant_results,
+        "experiment_id":        experiment_id,
+        "experiment_type":      "ablation",
+        "name":                 cfg.name,
+        "description":          cfg.description,
+        "goal":                 cfg.goal,
+        "ablated_agents":       cfg.ablate_agents,
+        "num_runs_per_variant": n,
+        "timestamp_utc":        datetime.now(tz=timezone.utc).isoformat(),
+        "variants":             variant_results,
     }
 
     out_path = exp_dir / "results.json"

@@ -53,6 +53,17 @@ def save_intermediate(state: "PipelineState", output_dir: Path) -> None:
         # Solution snapshot
         "solution_summary": (state["solution_artifact"] or {}).get("design_summary"),
         "stop_reason": state.get("stop_reason", ""),
+        # Audit layer diagnostics
+        "audit_statuses": {
+            "end_user": state.get("end_user_audit_status", ""),
+            "policy":   state.get("policy_audit_status", ""),
+            "software": state.get("software_audit_status", ""),
+        },
+        "audit_attempts": {
+            "end_user": state.get("end_user_audit_attempts", 0),
+            "policy":   state.get("policy_audit_attempts", 0),
+            "software": state.get("software_audit_attempts", 0),
+        },
     }
     path = run_dir / f"iter_{state['iteration']}.json"
     path.write_text(json.dumps(snap, indent=2, default=str), encoding="utf-8")
@@ -72,6 +83,15 @@ def save_final_outputs(state: "PipelineState", output_dir: Path) -> tuple[Path, 
     log_entries = state.get("log_entries", [])
     metrics_history = state.get("metrics_history", [])
 
+    # Deduplicate metrics_history: LangGraph's operator.add reducer can produce
+    # duplicate entries per iteration when parallel branches have unequal step
+    # counts (e.g. audit revision loops). Last-write-wins keeps the final
+    # evaluator output per iteration; sorted() preserves chronological order.
+    seen: dict[int, dict] = {}
+    for m in metrics_history:
+        seen[m["iteration"]] = m
+    deduped_metrics = [seen[k] for k in sorted(seen.keys())]
+
     final_json = {
         # Identity
         "run_id": state["run_id"],
@@ -86,7 +106,7 @@ def save_final_outputs(state: "PipelineState", output_dir: Path) -> tuple[Path, 
         "aggregated_feedback": state["aggregated_feedback"],
         "evaluation_details": state["evaluation_details"],
         # Full trace
-        "metrics_history": metrics_history,
+        "metrics_history": deduped_metrics,
         "log_entries": log_entries,
         # Diagnostics — extracted from the trace for quick inspection
         "parse_fallbacks": [
@@ -94,9 +114,15 @@ def save_final_outputs(state: "PipelineState", output_dir: Path) -> tuple[Path, 
         ],
         "weight_fallback_iterations": [
             m["iteration"]
-            for m in metrics_history
+            for m in deduped_metrics
             if m.get("used_weight_fallback")
         ],
+        # Audit layer outputs — full AuditOutput dicts for all three branches
+        "audit_outputs": {
+            "end_user": state.get("end_user_audit"),
+            "policy":   state.get("policy_audit"),
+            "software": state.get("software_audit"),
+        },
     }
     final_path = run_dir / "final.json"
     final_path.write_text(json.dumps(final_json, indent=2, default=str), encoding="utf-8")

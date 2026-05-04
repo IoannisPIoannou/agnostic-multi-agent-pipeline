@@ -35,6 +35,8 @@ class AblationConfig(BaseModel):
     ablate_agents: list[Literal["end_user", "policy", "software"]] = [
         "end_user", "policy", "software"
     ]
+    # Number of independent runs per variant for statistical reliability.
+    num_runs_per_variant: int = Field(default=1, ge=1, le=10)
 
 
 class BaselineConfig(BaseModel):
@@ -68,24 +70,61 @@ class RuntimeConfig(BaseModel):
     # Rough average token estimates per Gemini call type (adjust after profiling).
     avg_orchestrator_input_tokens: int = 800
     avg_orchestrator_output_tokens: int = 400
+    avg_independent_evaluator_input_tokens: int = 600
+    avg_independent_evaluator_output_tokens: int = 400
     avg_coding_input_tokens: int = 1200
     avg_coding_output_tokens: int = 800
     avg_synthesis_input_tokens: int = 1500
     avg_synthesis_output_tokens: int = 1000
 
 
+class PromptSpecificityConfig(BaseModel):
+    """Experiment 5: sensitivity to prompt specificity level (vague/moderate/highly_specific)."""
+    type: Literal["prompt_specificity"] = "prompt_specificity"
+    name: str
+    description: str = ""
+    domain: str = "logistics"
+    # Keys must be: vague, moderate, highly_specific
+    prompts: dict[str, str]
+
+    # Convergence sub-experiment
+    convergence_threshold: float    = 8.0
+    convergence_max_iterations: int = 5
+    convergence_num_runs: int       = Field(default=3, ge=1, le=10)
+
+    # Ablation sub-experiment
+    ablation_agents: list[Literal["end_user", "policy", "software"]] = [
+        "end_user", "policy", "software"
+    ]
+    ablation_num_runs_per_variant: int = Field(default=3, ge=1, le=10)
+
+    # Baseline sub-experiment
+    baseline_num_runs: int  = Field(default=3, ge=1, le=10)
+    baseline_model: str     = "gemini-2.5-flash"
+    judge_model: str        = "gemini-2.5-flash"
+    judge_criteria: list[str] = Field(default_factory=lambda: [
+        "usability", "clarity", "feasibility", "stakeholder_balance", "overall_quality",
+    ])
+
+    # Threshold sweep sub-experiment
+    sweep_thresholds: list[float]   = Field(default_factory=lambda: [7.0, 8.0, 9.0])
+    sweep_num_runs: int             = Field(default=3, ge=1, le=10)
+    sweep_max_iterations: int       = 5
+
+
 def load_config(
     path: str,
-) -> ConvergenceConfig | AblationConfig | BaselineConfig | RuntimeConfig:
+) -> ConvergenceConfig | AblationConfig | BaselineConfig | RuntimeConfig | PromptSpecificityConfig:
     """Load and validate an experiment config from a YAML file."""
     with open(path, encoding="utf-8") as f:
         raw = yaml.safe_load(f)
 
     dispatch = {
-        "convergence": ConvergenceConfig,
-        "ablation":    AblationConfig,
-        "baseline":    BaselineConfig,
-        "runtime":     RuntimeConfig,
+        "convergence":        ConvergenceConfig,
+        "ablation":           AblationConfig,
+        "baseline":           BaselineConfig,
+        "runtime":            RuntimeConfig,
+        "prompt_specificity": PromptSpecificityConfig,
     }
     exp_type = raw.get("type")
     cls = dispatch.get(exp_type)

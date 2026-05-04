@@ -82,6 +82,36 @@ class SoftwareFeedback(BaseModel):
     recommendations: list[str] = Field(description="Concrete improvements to address concerns")
 
 
+# ── Independent evaluator (Gemini) ───────────────────────────────────────────
+
+class IndependentEvaluation(BaseModel):
+    """Quality assessment produced by the independent Gemini evaluator.
+
+    The evaluator sees only the original goal and the solution artifact —
+    never the parallel agents' scores or concerns — to ensure unbiased scoring.
+    """
+    goal_alignment_score: float = Field(..., ge=1.0, le=10.0,
+        description="How well the solution addresses the stated goal (1-10)")
+    completeness_score:   float = Field(..., ge=1.0, le=10.0,
+        description="Coverage of all required aspects and edge cases (1-10)")
+    feasibility_score:    float = Field(..., ge=1.0, le=10.0,
+        description="Practical implementability given real-world constraints (1-10)")
+    clarity_score:        float = Field(..., ge=1.0, le=10.0,
+        description="Clarity and structure of the design (1-10)")
+    innovation_score:     float = Field(..., ge=1.0, le=10.0,
+        description="Quality of approach and design decisions (1-10)")
+    overall_score:        float = Field(..., ge=1.0, le=10.0,
+        description="Holistic quality score — your independent overall judgement (1-10)")
+    confidence:           float = Field(..., ge=0.0, le=1.0,
+        description="Confidence in this evaluation (0=uncertain, 1=very confident)")
+    key_concerns:         list[str] = Field(default_factory=list,
+        description="Top concerns about the solution")
+    recommendations:      list[str] = Field(default_factory=list,
+        description="Concrete improvements that would raise quality")
+    evaluation_summary:   str = Field(default="",
+        description="2-3 sentence overall assessment")
+
+
 # ── Coding agent ──────────────────────────────────────────────────────────────
 
 class Component(BaseModel):
@@ -104,3 +134,27 @@ class CodingOutput(BaseModel):
     evaluation_criteria: list[EvaluationCriterion] = Field(description="Measurable criteria to validate the solution")
     implementation_notes: str = Field(description="Key technical or practical notes for implementors")
     addressed_concerns: list[str] = Field(description="Which agent concerns were explicitly addressed in this revision")
+
+
+# ── Audit layer ───────────────────────────────────────────────────────────────
+
+class AuditOutput(BaseModel):
+    """Quality audit result for a single evaluator agent's feedback."""
+    role_adherence_score: float = Field(ge=0, le=10,
+        description="Does the feedback stay within its designated agent persona?")
+    grounding_score: float = Field(ge=0, le=10,
+        description="Are scores grounded in the actual solution content?")
+    specificity_score: float = Field(ge=0, le=10,
+        description="Are concerns and recommendations specific and actionable?")
+    score_text_consistency_score: float = Field(ge=0, le=10,
+        description="Do numeric scores align with the written concerns/recommendations?")
+    overall_audit_score: float = Field(ge=0, le=10,
+        description="Holistic quality of the feedback being audited.")
+    approved: bool = Field(
+        description="True if overall_audit_score >= threshold AND confidence >= min_confidence.")
+    issues: list[str] = Field(default_factory=list,
+        description="Specific problems found in the feedback.")
+    revision_request: str | None = Field(default=None,
+        description="When approved=False: clear instruction for how to revise the feedback.")
+    confidence: float = Field(ge=0, le=1,
+        description="Audit agent's confidence in its assessment.")

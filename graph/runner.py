@@ -30,23 +30,35 @@ def _print_metrics_table(metrics_history: list) -> None:
         print("\nNo metrics recorded.")
         return
 
-    header = f"{'Iter':>4}  {'Driver':>6}  {'Policy':>6}  {'Software':>8}  {'Overall':>7}  {'Conf_D':>6}  {'Conf_P':>6}  {'Conf_S':>6}  Stop"
+    # Deduplicate: LangGraph's operator.add reducer can produce duplicate entries
+    # per iteration when parallel branches have unequal step counts (audit revision
+    # loops). Last-write-wins keeps the final evaluator output; sorted() preserves
+    # chronological order.
+    seen: dict[int, dict] = {}
+    for m in metrics_history:
+        seen[m["iteration"]] = m
+    metrics_history = [seen[k] for k in sorted(seen.keys())]
+
+    header = (
+        f"{'Iter':>4}  {'GoalAlign':>9}  {'Complete':>8}  {'Feasible':>8}  "
+        f"{'Clarity':>7}  {'Innov':>5}  {'Overall':>7}  {'Conf':>5}  Stop"
+    )
     sep = "-" * len(header)
     print(f"\n{'='*len(header)}")
-    print("  PIPELINE METRICS SUMMARY")
+    print("  PIPELINE METRICS SUMMARY  (scored by independent evaluator)")
     print(sep)
     print(header)
     print(sep)
     for m in metrics_history:
         print(
             f"{m.get('iteration', '?'):>4}  "
-            f"{m.get('driver_avg', 0):>6.2f}  "
-            f"{m.get('policy_avg', 0):>6.2f}  "
-            f"{m.get('software_avg', 0):>8.2f}  "
+            f"{m.get('goal_alignment', 0):>9.2f}  "
+            f"{m.get('completeness',  0):>8.2f}  "
+            f"{m.get('feasibility',   0):>8.2f}  "
+            f"{m.get('clarity',       0):>7.2f}  "
+            f"{m.get('innovation',    0):>5.2f}  "
             f"{m.get('overall_score', 0):>7.2f}  "
-            f"{m.get('driver_conf', 0):>6.2f}  "
-            f"{m.get('policy_conf', 0):>6.2f}  "
-            f"{m.get('software_conf', 0):>6.2f}  "
+            f"{m.get('confidence',    0):>5.2f}  "
             f"{m.get('stop_reason', '') or 'continue'}"
         )
     print(sep)

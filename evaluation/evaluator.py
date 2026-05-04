@@ -29,24 +29,24 @@ logger = get_logger(__name__)
 
 def _compute_overall_score(state: PipelineState, cfg: dict) -> tuple[float, dict]:
     """
-    Read the pre-computed weighted score and agent details from aggregated_feedback.
+    Read the independent evaluator's score as the stopping criterion.
 
-    aggregator_node is the single source of truth for scoring; reading from its
-    output eliminates the risk of the two implementations diverging silently.
+    The independent_evaluator node scores the solution against the original
+    goal without seeing parallel-agent feedback, removing self-evaluation bias.
+    Unresolved conflicts are still read from aggregated_feedback for the
+    convergence check — the parallel agents remain the conflict signal source.
     """
-    agg  = state.get("aggregated_feedback") or {}
-    avgs  = agg.get("agent_averages", {})
-    confs = agg.get("agent_confidences", {})
+    ind = state.get("independent_evaluation") or {}
+    agg = state.get("aggregated_feedback")    or {}
 
-    return agg.get("weighted_score", 0.0), {
-        "driver_avg":           avgs.get("driver",   5.0),
-        "policy_avg":           avgs.get("policy",   5.0),
-        "software_avg":         avgs.get("software", 5.0),
-        "driver_conf":          confs.get("driver",   0.0),
-        "policy_conf":          confs.get("policy",   0.0),
-        "software_conf":        confs.get("software", 0.0),
-        "normalised_weights":   agg.get("normalised_weights", {}),
-        "used_weight_fallback": agg.get("used_weight_fallback", False),
+    return ind.get("overall_score", 0.0), {
+        "goal_alignment":       ind.get("goal_alignment_score", 5.0),
+        "completeness":         ind.get("completeness_score",   5.0),
+        "feasibility":          ind.get("feasibility_score",    5.0),
+        "clarity":              ind.get("clarity_score",        5.0),
+        "innovation":           ind.get("innovation_score",     5.0),
+        "confidence":           ind.get("confidence",           0.0),
+        "evaluation_summary":   ind.get("evaluation_summary",  ""),
         "unresolved_conflicts": agg.get("unresolved_conflicts", []),
     }
 
@@ -78,13 +78,9 @@ def _is_converged(
     unresolved = detail.get("unresolved_conflicts", [])
     no_conflicts = len(unresolved) <= pipeline_cfg["max_unresolved_conflicts"]
 
-    # (c) All active agents confident enough.
-    # Agents with confidence=0.0 are treated as absent (stub or parse-failure
-    # fallback) and excluded from this gate so they do not permanently block
-    # convergence when one evaluator is disabled during ablation.
+    # (c) Independent evaluator is sufficiently confident in its assessment.
     min_conf = pipeline_cfg["min_confidence_threshold"]
-    confidences = [detail["driver_conf"], detail["policy_conf"], detail["software_conf"]]
-    confident_enough = all(c >= min_conf for c in confidences if c > 0.0)
+    confident_enough = detail["confidence"] >= min_conf
 
     return score_stable and no_conflicts and confident_enough
 
@@ -108,7 +104,7 @@ def evaluator_node(state: PipelineState) -> dict:
     overall_score, detail = _compute_overall_score(state, cfg)
     converged = _is_converged(overall_score, state, cfg, detail)
 
-    threshold = pipeline_cfg["score_threshold"]
+    threshold = state["score_threshold"]
     max_iter  = state["max_iterations"]
 
     stop_threshold = overall_score >= threshold
@@ -126,18 +122,18 @@ def evaluator_node(state: PipelineState) -> dict:
 
     # ── Append metrics history entry ─────────────────────────────────────────
     metrics_entry = {
-        "iteration":          iteration,
-        "overall_score":      overall_score,
-        "driver_avg":         detail["driver_avg"],
-        "policy_avg":         detail["policy_avg"],
-        "software_avg":       detail["software_avg"],
-        "driver_conf":        detail["driver_conf"],
-        "policy_conf":        detail["policy_conf"],
-        "software_conf":      detail["software_conf"],
-        "used_weight_fallback":  detail["used_weight_fallback"],
-        "unresolved_conflicts":  len(detail["unresolved_conflicts"]),
-        "converged":             converged,
-        "stop_reason":           stop_reason,
+        "iteration":            iteration,
+        "overall_score":        overall_score,
+        "goal_alignment":       detail["goal_alignment"],
+        "completeness":         detail["completeness"],
+        "feasibility":          detail["feasibility"],
+        "clarity":              detail["clarity"],
+        "innovation":           detail["innovation"],
+        "confidence":           detail["confidence"],
+        "unresolved_conflicts": len(detail["unresolved_conflicts"]),
+        "converged":            converged,
+        "stop_reason":          stop_reason,
+        "used_weight_fallback": (state.get("aggregated_feedback") or {}).get("used_weight_fallback", False),
     }
 
     log_entry = make_log_entry(

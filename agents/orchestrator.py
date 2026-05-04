@@ -270,4 +270,15 @@ def orchestrator_node(state: PipelineState) -> dict:
         "revision_strategy": result.revision_strategy,
         "priority_focus":    result.priority_focus,
         "log_entries":       log_entries,
+        # Reset audit state at the start of each iteration so revision_request
+        # does not leak from one cycle to the next.
+        "end_user_audit":          None,
+        "policy_audit":            None,
+        "software_audit":          None,
+        "end_user_audit_attempts": 0,
+        "policy_audit_attempts":   0,
+        "software_audit_attempts": 0,
+        "end_user_audit_status":   "",
+        "policy_audit_status":     "",
+        "software_audit_status":   "",
     }

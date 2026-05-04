@@ -10,10 +10,13 @@ Responsibilities:
 
 No LLM is used here — this is deterministic and fast.
 
-aggregated_feedback is the single source of truth for scoring.
-evaluation/evaluator.py reads weighted_score, agent_averages, agent_confidences,
-normalised_weights, and used_weight_fallback directly from here instead of
-recomputing them.
+aggregated_feedback provides conflict detection and improvement context.
+
+evaluation/evaluator.py uses unresolved_conflicts for convergence checks.
+The stopping score is provided by independent_evaluation.overall_score.
+
+weighted_score is NOT used for stopping decisions.
+It is passed to the coding agent as a diagnostic signal only.
 """
 
 from __future__ import annotations
@@ -194,6 +197,27 @@ def aggregator_node(state: PipelineState) -> dict:
             "resolved_conflicts":   resolved,
             "all_concerns":         all_concerns,
             "all_recommendations":  all_recommendations,
+            # Audit diagnostics — captured after all branches have completed.
+            "audit_diagnostics": {
+                "end_user": {
+                    "status":             state.get("end_user_audit_status", ""),
+                    "attempts":           state.get("end_user_audit_attempts", 0),
+                    "overall_audit_score": (state.get("end_user_audit") or {}).get("overall_audit_score"),
+                    "issues":             (state.get("end_user_audit") or {}).get("issues", []),
+                },
+                "policy": {
+                    "status":             state.get("policy_audit_status", ""),
+                    "attempts":           state.get("policy_audit_attempts", 0),
+                    "overall_audit_score": (state.get("policy_audit") or {}).get("overall_audit_score"),
+                    "issues":             (state.get("policy_audit") or {}).get("issues", []),
+                },
+                "software": {
+                    "status":             state.get("software_audit_status", ""),
+                    "attempts":           state.get("software_audit_attempts", 0),
+                    "overall_audit_score": (state.get("software_audit") or {}).get("overall_audit_score"),
+                    "issues":             (state.get("software_audit") or {}).get("issues", []),
+                },
+            },
         },
         "log_entries": [log_entry],
     }

@@ -21,10 +21,26 @@ models:
     provider: gemini
     model: gemini-2.5-flash
     temperature: 0.2
+  independent_evaluator:
+    provider: gemini
+    model: gemini-2.5-flash
+    temperature: 0.1   # low temperature for consistent, reproducible scoring
   synthesis:
     provider: gemini
     model: gemini-2.5-flash
     temperature: 0.4
+  end_user_audit_agent:
+    provider: ollama
+    model: llama3.2:3b
+    temperature: 0.1
+  policy_audit_agent:
+    provider: ollama
+    model: llama3.2:3b
+    temperature: 0.1
+  software_audit_agent:
+    provider: ollama
+    model: qwen2.5-coder:7b-instruct
+    temperature: 0.1
 
 # ── Pipeline Control ─────────────────────────────────────────────────────────
 pipeline:
@@ -59,3 +75,11 @@ logging:
 persistence:
   output_dir: outputs
   save_intermediate: true        # Write iter_N.json after every iteration
+
+# ── Audit Layer ────────────────────────────────────────────────────────────────
+# Set enabled: false to bypass all audit nodes (pipeline behaves as before).
+audit_layer:
+  enabled: true
+  audit_approval_threshold: 8.5  # overall_audit_score must be >= this to approve
+  min_audit_confidence: 0.5      # audit confidence must be >= this to approve
+  max_audit_revisions: 2         # max revision loops per evaluator per iteration

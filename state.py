@@ -35,11 +35,29 @@ class PipelineState(TypedDict):
     policy_feedback: dict | None
     software_feedback: dict | None
 
+    # ── Audit layer (one key per evaluator branch, set by audit nodes) ────────
+    # Cleared by orchestrator_node at the start of each iteration so
+    # revision_request never leaks into the next cycle.
+    end_user_audit: dict | None
+    policy_audit: dict | None
+    software_audit: dict | None
+    end_user_audit_attempts: int   # incremented by end_user_audit node each run
+    policy_audit_attempts: int
+    software_audit_attempts: int
+    end_user_audit_status: str     # "" | "approved" | "failed_after_max_revisions" | "disabled"
+    policy_audit_status: str
+    software_audit_status: str
+
     # ── Aggregated feedback (set by aggregator_node after fan-in) ─────────────
     aggregated_feedback: dict | None
 
     # ── Solution produced by the coding agent ─────────────────────────────────
     solution_artifact: dict | None
+
+    # ── Independent quality evaluation (set by independent_evaluator_node) ────
+    # Scores the solution against the original goal without seeing parallel-agent
+    # feedback, providing an unbiased stopping criterion.
+    independent_evaluation: dict | None
 
     # ── Evaluation results (set by evaluator_node) ────────────────────────────
     evaluation_score: float
@@ -73,8 +91,18 @@ def initial_state(user_goal: str, run_id: str, cfg: dict) -> PipelineState:
         driver_feedback=None,
         policy_feedback=None,
         software_feedback=None,
+        end_user_audit=None,
+        policy_audit=None,
+        software_audit=None,
+        end_user_audit_attempts=0,
+        policy_audit_attempts=0,
+        software_audit_attempts=0,
+        end_user_audit_status="",
+        policy_audit_status="",
+        software_audit_status="",
         aggregated_feedback=None,
         solution_artifact=None,
+        independent_evaluation=None,
         evaluation_score=0.0,
         evaluation_details={},
         final_report=None,
