@@ -82,12 +82,19 @@ def main() -> None:
     # ── Generate a unique run ID ──────────────────────────────────────────────
     run_id = str(uuid.uuid4())[:8]   # short UUID for readable output paths
 
+    audit_cfg = cfg.get("audit_layer", {})
+    audit_status = "ON" if audit_cfg.get("enabled", False) else "OFF"
+
     print(f"\n{'='*60}")
     print(f"  Multi-Agent Pipeline")
-    print(f"  Run ID : {run_id}")
+    print(f"  Run ID         : {run_id}")
     print(f"  Max iterations : {cfg['pipeline']['max_iterations']}")
     print(f"  Score threshold: {cfg['pipeline']['score_threshold']}")
-    print(f"{'='*60}\n")
+    print(f"  Audit layer    : {audit_status}", end="")
+    if audit_status == "ON":
+        print(f"  (threshold={audit_cfg.get('audit_approval_threshold', 8.5)}, "
+              f"max_revisions={audit_cfg.get('max_audit_revisions', 2)})", end="")
+    print(f"\n{'='*60}\n")
     print("Goal:\n" + user_goal.strip())
     print(f"\n{'='*60}\n")
 
